@@ -9,7 +9,7 @@ import android.view.accessibility.AccessibilityEvent
  * FocusAccessibilityService — the Enforcer.
  *
  * Listens for TYPE_WINDOW_STATE_CHANGED events. When the foreground app is
- * one of the DISTRACTING_PACKAGES, it immediately launches
+ * one of the user-configured blocked apps, it immediately launches
  * WorkoutOverlayActivity so the user must complete a workout to proceed.
  *
  * Performance notes:
@@ -20,24 +20,6 @@ import android.view.accessibility.AccessibilityEvent
 class FocusAccessibilityService : AccessibilityService() {
 
     companion object {
-        /** Apps that require a workout to access. */
-        val DISTRACTING_PACKAGES: Set<String> = setOf(
-            "com.instagram.android",
-            "com.google.android.youtube",
-            "com.android.vending",          // Play Store
-            "com.twitter.android",
-            "com.facebook.katana",
-            "com.facebook.lite",
-            "com.snapchat.android",
-            "com.zhiliaoapp.musically",     // TikTok
-            "com.reddit.frontpage",
-            "com.netflix.mediaclient",
-            "com.linkedin.android",
-            "com.pinterest",
-            "com.tumblr",
-            "com.discord"
-        )
-
         /**
          * Packages that must NEVER trigger the enforcer.
          * Combines the launcher's allowed list with system-UI packages.
@@ -77,9 +59,12 @@ class FocusAccessibilityService : AccessibilityService() {
         if (WorkoutOverlayActivity.isUnlockWindowActive(this)) return
 
         // Block distracting apps.
-        if (pkg in DISTRACTING_PACKAGES) {
+        if (pkg in AppPreferences.getBlockedApps(this)) {
+            AppPreferences.incrementBlockCount(this, pkg)
+            AppPreferences.appendUsageLog(this, "blocked", pkg, "workout_required")
             val intent = Intent(this, WorkoutOverlayActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra("blocked_package", pkg)
             }
             startActivity(intent)
         }

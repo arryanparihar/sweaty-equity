@@ -13,6 +13,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.appcompat.app.AppCompatActivity
 
 /**
@@ -84,6 +85,13 @@ class HomeActivity : AppCompatActivity() {
         layout.addView(makeText("no more reels lol", 12f, Color.DKGRAY).apply {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 56)
+        })
+        layout.addView(makeText("→  Sweaty Settings", 15f, ContextCompat.getColor(this, android.R.color.holo_blue_light)).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 40)
+            setOnClickListener {
+                startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
+            }
         })
 
         // Divider

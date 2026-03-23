@@ -29,6 +29,7 @@ import kotlin.math.sqrt
 class ChallengeManager(
     context: Context,
     val challengeType: ChallengeType,
+    private val targetOverride: Int? = null,
     private val onProgressUpdate: (current: Int, target: Int) -> Unit,
     private val onCompleted: () -> Unit,
     private val onTimerTick: ((secondsRemaining: Long) -> Unit)? = null,
@@ -45,16 +46,19 @@ class ChallengeManager(
 
         /** Minimum upward pitch (degrees) to register one curl-up. */
         private const val CURL_UP_PITCH_THRESHOLD = 20.0
+        private const val CURL_UP_MIN_DELTA_DEGREES = 12.0
+        private const val PUSHUP_MIN_INTERVAL_MS = 1_500L
+        private const val CURL_UP_MIN_INTERVAL_MS = 1_500L
     }
 
     // ─── State ────────────────────────────────────────────────────────────────
 
     val target: Int
-        get() = when (challengeType) {
+        get() = (targetOverride ?: when (challengeType) {
             ChallengeType.SPRINT   -> SPRINT_STEP_TARGET
             ChallengeType.PUSHUPS  -> PUSHUP_TARGET
             ChallengeType.CURL_UPS -> CURL_UP_TARGET
-        }
+        }).coerceAtLeast(1)
 
     private val sensorManager =
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -64,9 +68,12 @@ class ChallengeManager(
 
     // Pushup state
     private var lastProximityNear  = false
+    private var lastPushupCountAtMs = 0L
 
     // Curl-up state
     private var lastCurledUp       = false
+    private var lastCurlCountAtMs  = 0L
+    private var baselinePitchDeg   = 0.0
 
     // Sprint timer — implemented with a simple Handler + Runnable loop so we
     // don't pull in coroutines or extra libraries.
@@ -80,6 +87,11 @@ class ChallengeManager(
         if (isRegistered) return
         isRegistered = true
         currentCount = 0
+        lastPushupCountAtMs = 0L
+        lastCurlCountAtMs = 0L
+        baselinePitchDeg = 0.0
+        lastCurledUp = false
+        lastProximityNear = false
         when (challengeType) {
             ChallengeType.SPRINT   -> registerSprint()
             ChallengeType.PUSHUPS  -> registerPushups()
@@ -170,10 +182,10 @@ class ChallengeManager(
 
     /** Each TYPE_STEP_DETECTOR event represents exactly one step. */
     private fun handleStep() {
-        if (currentCount >= SPRINT_STEP_TARGET) return
+        if (currentCount >= target) return
         currentCount++
         onProgressUpdate(currentCount, target)
-        if (currentCount >= SPRINT_STEP_TARGET) {
+        if (currentCount >= target) {
             cancelSprintTimer()
             onCompleted()
         }
@@ -187,9 +199,13 @@ class ChallengeManager(
     private fun handleProximity(event: SensorEvent) {
         val isNear = event.values[0] < event.sensor.maximumRange
         if (lastProximityNear && !isNear) {
-            currentCount++
-            onProgressUpdate(currentCount, target)
-            if (currentCount >= PUSHUP_TARGET) onCompleted()
+            val now = System.currentTimeMillis()
+            if (lastPushupCountAtMs == 0L || now - lastPushupCountAtMs >= PUSHUP_MIN_INTERVAL_MS) {
+                currentCount++
+                lastPushupCountAtMs = now
+                onProgressUpdate(currentCount, target)
+                if (currentCount >= target) onCompleted()
+            }
         }
         lastProximityNear = isNear
     }
@@ -211,9 +227,19 @@ class ChallengeManager(
 
         val isCurledUp = pitchDeg > CURL_UP_PITCH_THRESHOLD
         if (isCurledUp && !lastCurledUp) {
-            currentCount++
-            onProgressUpdate(currentCount, target)
-            if (currentCount >= CURL_UP_TARGET) onCompleted()
+            val now = System.currentTimeMillis()
+            val movementDelta = pitchDeg - baselinePitchDeg
+            if ((lastCurlCountAtMs == 0L || now - lastCurlCountAtMs >= CURL_UP_MIN_INTERVAL_MS) &&
+                movementDelta >= CURL_UP_MIN_DELTA_DEGREES
+            ) {
+                currentCount++
+                lastCurlCountAtMs = now
+                onProgressUpdate(currentCount, target)
+                if (currentCount >= target) onCompleted()
+            }
+        }
+        if (!isCurledUp) {
+            baselinePitchDeg = pitchDeg
         }
         lastCurledUp = isCurledUp
     }
