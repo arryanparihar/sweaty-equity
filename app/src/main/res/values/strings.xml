@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sweaty Equity</string>
+    <string name="accessibility_service_description">Sweaty Equity monitors active apps and enforces workout challenges before allowing access to distracting applications.</string>
+</resources>
