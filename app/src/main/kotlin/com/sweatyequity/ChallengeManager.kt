@@ -6,6 +6,7 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import kotlin.math.atan2
+import kotlin.math.min
 import kotlin.math.sqrt
 
 /**
@@ -46,6 +47,9 @@ class ChallengeManager(
 
         /** Minimum upward pitch (degrees) to register one curl-up. */
         private const val CURL_UP_PITCH_THRESHOLD = 20.0
+        /** Baseline is captured only near neutral posture to avoid false baselines. */
+        private const val CURL_UP_BASELINE_MAX_DEGREES = 15.0
+        /** Requires meaningful torso movement above baseline to count a rep. */
         private const val CURL_UP_MIN_DELTA_DEGREES = 12.0
         private const val PUSHUP_MIN_INTERVAL_MS = 1_500L
         private const val CURL_UP_MIN_INTERVAL_MS = 1_500L
@@ -74,6 +78,8 @@ class ChallengeManager(
     private var lastCurledUp       = false
     private var lastCurlCountAtMs  = 0L
     private var baselinePitchDeg   = 0.0
+    private var hasBaselinePitch   = false
+    private var pendingBaselineMinPitchDeg = Double.MAX_VALUE
 
     // Sprint timer — implemented with a simple Handler + Runnable loop so we
     // don't pull in coroutines or extra libraries.
@@ -90,6 +96,8 @@ class ChallengeManager(
         lastPushupCountAtMs = 0L
         lastCurlCountAtMs = 0L
         baselinePitchDeg = 0.0
+        hasBaselinePitch = false
+        pendingBaselineMinPitchDeg = Double.MAX_VALUE
         lastCurledUp = false
         lastProximityNear = false
         when (challengeType) {
@@ -224,6 +232,16 @@ class ChallengeManager(
         val pitchDeg = Math.toDegrees(
             atan2(ay.toDouble(), sqrt((ax * ax + az * az).toDouble()))
         )
+        if (!hasBaselinePitch) {
+            pendingBaselineMinPitchDeg = min(pendingBaselineMinPitchDeg, pitchDeg)
+            if (pitchDeg <= CURL_UP_BASELINE_MAX_DEGREES) {
+                baselinePitchDeg = pendingBaselineMinPitchDeg
+                hasBaselinePitch = true
+            } else {
+                lastCurledUp = pitchDeg > CURL_UP_PITCH_THRESHOLD
+                return
+            }
+        }
 
         val isCurledUp = pitchDeg > CURL_UP_PITCH_THRESHOLD
         if (isCurledUp && !lastCurledUp) {

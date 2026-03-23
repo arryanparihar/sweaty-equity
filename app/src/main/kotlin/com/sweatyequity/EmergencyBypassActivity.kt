@@ -50,7 +50,7 @@ class EmergencyBypassActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
                 if (entered == expected) {
-                    AppPreferences.markUnlockNow(this@EmergencyBypassActivity)
+                    AppPreferences.markEmergencyUnlockNow(this@EmergencyBypassActivity)
                     AppPreferences.appendUsageLog(
                         context = this@EmergencyBypassActivity,
                         event = "emergency_bypass_used",

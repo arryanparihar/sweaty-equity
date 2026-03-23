@@ -132,8 +132,12 @@ class SettingsActivity : AppCompatActivity() {
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
                 val pin = input.text.toString().trim()
-                if (pin.length < 4 || !pin.all { it.isDigit() }) {
-                    Toast.makeText(this, "PIN must be at least 4 digits.", Toast.LENGTH_SHORT).show()
+                if (!AppPreferences.isValidEmergencyPin(pin)) {
+                    Toast.makeText(
+                        this,
+                        "PIN must be ${AppPreferences.EMERGENCY_PIN_MIN_LENGTH} to ${AppPreferences.EMERGENCY_PIN_MAX_LENGTH} digits.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     return@setPositiveButton
                 }
                 AppPreferences.setEmergencyPin(this, pin)

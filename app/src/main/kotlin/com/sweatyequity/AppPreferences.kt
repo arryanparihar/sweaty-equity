@@ -4,6 +4,7 @@ import android.content.Context
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 object AppPreferences {
     private const val PREFS_NAME = "sweaty_equity_prefs"
@@ -16,12 +17,19 @@ object AppPreferences {
     private const val KEY_WORKOUTS_COMPLETED = "workouts_completed"
     private const val KEY_STREAK_COUNT = "streak_count"
     private const val KEY_LAST_WORKOUT_DAY = "last_workout_day"
+    private const val KEY_LAST_EMERGENCY_UNLOCK_TIME = "last_emergency_unlock_time"
     private const val KEY_USAGE_LOG = "usage_log"
     private const val KEY_LAST_WORKOUT_UNLOCK_TIME = "last_workout_unlock_time"
     private const val KEY_BLOCK_COUNT_PREFIX = "block_count_"
 
     private const val MAX_USAGE_LOG_LINES = 200
     private const val UNLOCK_DURATION_MS = 15L * 60L * 1_000L
+    private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1_000L
+    const val EMERGENCY_PIN_MIN_LENGTH = 4
+    const val EMERGENCY_PIN_MAX_LENGTH = 12
+    private val logDateFormat = ThreadLocal.withInitial {
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    }
 
     val DEFAULT_BLOCKED_PACKAGES: Set<String> = setOf(
         "com.instagram.android",
@@ -57,6 +65,14 @@ object AppPreferences {
         prefs(context).edit()
             .putLong(KEY_UNLOCK_TIME, now)
             .putLong(KEY_LAST_WORKOUT_UNLOCK_TIME, now)
+            .apply()
+    }
+
+    fun markEmergencyUnlockNow(context: Context) {
+        val now = System.currentTimeMillis()
+        prefs(context).edit()
+            .putLong(KEY_UNLOCK_TIME, now)
+            .putLong(KEY_LAST_EMERGENCY_UNLOCK_TIME, now)
             .apply()
     }
 
@@ -119,6 +135,12 @@ object AppPreferences {
         prefs(context).edit().putString(KEY_EMERGENCY_PIN, pin.trim()).apply()
     }
 
+    fun isValidEmergencyPin(pin: String): Boolean {
+        val trimmed = pin.trim()
+        return trimmed.length in EMERGENCY_PIN_MIN_LENGTH..EMERGENCY_PIN_MAX_LENGTH &&
+            trimmed.all { it.isDigit() }
+    }
+
     fun incrementBlockCount(context: Context, packageName: String) {
         val key = KEY_BLOCK_COUNT_PREFIX + packageName
         val current = prefs(context).getInt(key, 0)
@@ -135,7 +157,7 @@ object AppPreferences {
     fun recordWorkoutCompletion(context: Context) {
         val prefs = prefs(context)
         val now = System.currentTimeMillis()
-        val day = now / (24L * 60L * 60L * 1000L)
+        val day = localEpochDay(now)
         val lastDay = prefs.getLong(KEY_LAST_WORKOUT_DAY, -1L)
         val currentStreak = prefs.getInt(KEY_STREAK_COUNT, 0)
         val nextStreak = when {
@@ -160,7 +182,8 @@ object AppPreferences {
     fun appendUsageLog(context: Context, event: String, packageName: String? = null, detail: String? = null) {
         val prefs = prefs(context)
         val current = prefs.getString(KEY_USAGE_LOG, "") ?: ""
-        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+        val timestamp = logDateFormat.get()?.format(Date())
+            ?: SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         val pkg = packageName ?: "-"
         val extra = detail ?: "-"
         val line = "$timestamp | $event | $pkg | $extra"
@@ -179,5 +202,10 @@ object AppPreferences {
     private fun isValidPackageName(value: String): Boolean {
         if (value.isBlank()) return false
         return value.matches(Regex("^[a-zA-Z0-9_]+(\\.[a-zA-Z0-9_]+)+$"))
+    }
+
+    private fun localEpochDay(timestampMs: Long): Long {
+        val offsetMs = TimeZone.getDefault().getOffset(timestampMs).toLong()
+        return (timestampMs + offsetMs) / MILLIS_PER_DAY
     }
 }

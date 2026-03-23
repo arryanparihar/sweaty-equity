@@ -146,7 +146,7 @@ class WorkoutOverlayActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 56)
         })
-        root.addView(label("or use emergency bypass if absolutely necessary", 11f, Color.DKGRAY).apply {
+        root.addView(label("Or use emergency bypass if absolutely necessary", 11f, Color.DKGRAY).apply {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 32)
             setOnClickListener {
