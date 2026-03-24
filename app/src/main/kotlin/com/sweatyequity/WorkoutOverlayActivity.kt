@@ -2,6 +2,7 @@ package com.sweatyequity
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -14,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -37,26 +39,15 @@ class WorkoutOverlayActivity : AppCompatActivity() {
     // ─── Companion ────────────────────────────────────────────────────────────
 
     companion object {
-        private const val PREFS_NAME        = "sweaty_equity_prefs"
-        private const val KEY_UNLOCK_TIME   = "unlock_timestamp"
-
-        /** Duration of the post-workout unlock window: 15 minutes. */
-        private const val UNLOCK_DURATION_MS = 15L * 60L * 1_000L
-
-        /**
-         * Returns true if a completed workout still grants access
-         * (i.e., fewer than 15 minutes have elapsed since it was completed).
-         */
         fun isUnlockWindowActive(context: Context): Boolean {
-            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val ts = prefs.getLong(KEY_UNLOCK_TIME, 0L)
-            return System.currentTimeMillis() - ts < UNLOCK_DURATION_MS
+            return AppPreferences.isUnlockWindowActive(context)
         }
     }
 
     // ─── State ────────────────────────────────────────────────────────────────
 
     private var challengeManager: ChallengeManager? = null
+    private var blockedPackage: String? = null
 
     // Pending challenge type, held while we wait for a permission grant.
     private var pendingChallengeType: ChallengeType? = null
@@ -83,6 +74,7 @@ class WorkoutOverlayActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        blockedPackage = intent.getStringExtra("blocked_package")
 
         // If the user already completed a workout recently, let them through.
         if (isUnlockWindowActive(this)) {
@@ -153,6 +145,13 @@ class WorkoutOverlayActivity : AppCompatActivity() {
         root.addView(label("Pay your dues to unlock your phone.", 13f, Color.GRAY).apply {
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 56)
+        })
+        root.addView(label("Or use emergency bypass if absolutely necessary", 11f, Color.DKGRAY).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 32)
+            setOnClickListener {
+                startActivity(Intent(this@WorkoutOverlayActivity, EmergencyBypassActivity::class.java))
+            }
         })
 
         // ── Challenge selection ───────────────────────────────────────────────
@@ -266,6 +265,7 @@ class WorkoutOverlayActivity : AppCompatActivity() {
         challengeManager = ChallengeManager(
             context          = this,
             challengeType    = type,
+            targetOverride   = AppPreferences.getWorkoutGoal(this, type),
             onProgressUpdate = { current, tgt ->
                 runOnUiThread {
                     counterText.text   = "$current / $tgt"
@@ -296,10 +296,15 @@ class WorkoutOverlayActivity : AppCompatActivity() {
     }
 
     private fun completeChallenge() {
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putLong(KEY_UNLOCK_TIME, System.currentTimeMillis())
-            .apply()
+        AppPreferences.markWorkoutUnlockNow(this)
+        AppPreferences.recordWorkoutCompletion(this)
+        AppPreferences.appendUsageLog(
+            context = this,
+            event = "workout_completed",
+            packageName = blockedPackage,
+            detail = challengeManager?.challengeType?.name ?: "unknown"
+        )
+        Toast.makeText(this, "Workout completed. Access unlocked for 15 minutes.", Toast.LENGTH_SHORT).show()
 
         challengeManager?.unregister()
         challengeManager = null
